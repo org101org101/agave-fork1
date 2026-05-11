@@ -12,6 +12,40 @@ on:
       - labeled
 
 jobs:
+  check-label:
+    # Only run on labeled events
+    if: github.event.action == 'labeled'
+    runs-on: ubuntu-24.04
+    outputs:
+      is_ci_label: ${{ steps.check.outputs.is_ci_label }}
+      label_name: ${{ steps.check.outputs.label_name }}
+    steps:
+      - name: Check and remove CI label
+        id: check
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const labelName = context.payload.label.name;
+            const isCiLabel = labelName === 'CI';
+
+            console.log(`Label added: ${labelName}`);
+            console.log(`Is CI label: ${isCiLabel}`);
+
+            core.setOutput('is_ci_label', isCiLabel.toString());
+            core.setOutput('label_name', labelName);
+
+            // Remove CI label if it matches
+            if (isCiLabel) {
+              console.log('Removing CI label...');
+              await github.rest.issues.removeLabel({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: context.payload.pull_request.number,
+                name: 'CI'
+              });
+              console.log('CI label removed');
+            }
+
   check-member:
     # Only check membership for non-labeled events
     if: github.event.action != 'labeled'
@@ -40,12 +74,13 @@ jobs:
             core.setOutput('pr_author_association', prAuthorAssociation);
 
   prepare-buildkite-info:
-    needs: check-member
-    # Run if: (1) labeled with CI, OR (2) passed member check
+    needs:
+      - check-label
+      - check-member
     if: |
       always() &&
       (
-        (github.event.action == 'labeled' && github.event.label.name == 'CI') ||
+        (needs.check-label.result == 'success' && needs.check-label.outputs.is_ci_label == 'true') ||
         (needs.check-member.result == 'success' && needs.check-member.outputs.is_outside_contributor == 'false')
       )
     runs-on: ubuntu-24.04
