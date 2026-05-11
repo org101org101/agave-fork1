@@ -77,7 +77,7 @@ jobs:
       - name: Trigger a Buildkite Build
         uses: "buildkite/trigger-pipeline-action@41fd38b69189bf186cf69cf10ec807a850cae593"
         with:
-          pipeline_uuid: ${{ vars.BUILDKITE_PIPELINE }}
+          pipeline_uuid: ${{ vars.BUILDKITE_PIPELINE_UUID }}
           buildkite_api_access_token: ${{ secrets.BUILDKITE_API_ACCESS_TOKEN }}
           branch: "${{ needs.prepare-buildkite-info.outputs.branch }}"
           build_meta_data: '{"pr_number": "${{ needs.prepare-buildkite-info.outputs.pr_number }}"}'
