@@ -4,9 +4,17 @@ on:
   pull_request_target:
     branches:
       - master
+      - v[0-9]+.[0-9]+
+    types:
+      - opened
+      - synchronize
+      - reopened
+      - labeled
 
 jobs:
   check-member:
+    # Only check membership for non-labeled events
+    if: github.event.action != 'labeled'
     runs-on: ubuntu-24.04
     outputs:
       is_outside_contributor: ${{ steps.check.outputs.is_outside_contributor }}
@@ -31,37 +39,15 @@ jobs:
             core.setOutput('pr_author', prAuthor);
             core.setOutput('pr_author_association', prAuthorAssociation);
 
-      - name: Generate membership summary
-        run: |
-          IS_OUTSIDE="${{ steps.check.outputs.is_outside_contributor }}"
-
-          if [ "$IS_OUTSIDE" == "true" ]; then
-            STATUS_EMOJI="❌"
-            STATUS_TEXT="Outside Contributor"
-            STATUS_COLOR="🔴"
-          else
-            STATUS_EMOJI="✅"
-            STATUS_TEXT="Member"
-            STATUS_COLOR="🟢"
-          fi
-
-          cat >> $GITHUB_STEP_SUMMARY <<EOF
-          # Membership Check $STATUS_EMOJI
-
-          | Field | Value |
-          |-------|-------|
-          | **PR Author** | ${{ steps.check.outputs.pr_author }} |
-          | **Association** | \`${{ steps.check.outputs.pr_author_association }}\` |
-          | **Status** | $STATUS_COLOR $STATUS_TEXT |
-
-          ---
-
-          **Checked at:** $(date -u '+%Y-%m-%d %H:%M:%S UTC')
-          EOF
-
   prepare-buildkite-info:
     needs: check-member
-    if: needs.check-member.outputs.is_outside_contributor == 'false'
+    # Run if: (1) labeled with CI, OR (2) passed member check
+    if: |
+      always() &&
+      (
+        (github.event.action == 'labeled' && github.event.label.name == 'CI') ||
+        (needs.check-member.result == 'success' && needs.check-member.outputs.is_outside_contributor == 'false')
+      )
     runs-on: ubuntu-24.04
     outputs:
       branch: ${{ steps.prepare.outputs.branch }}
@@ -89,13 +75,24 @@ jobs:
 
       - name: Generate pipeline summary
         run: |
+          # Check if this was triggered by CI label
+          if [ "${{ github.event.action }}" == "labeled" ]; then
+            TRIGGER_TYPE="🏷️ CI Label"
+            AUTHOR_INFO=""
+          else
+            TRIGGER_TYPE="📝 Pull Request Event"
+            AUTHOR_INFO="| **PR Author** | ${{ needs.check-member.outputs.pr_author }} |
+          | **Author Association** | \`${{ needs.check-member.outputs.pr_author_association }}\` |"
+          fi
+
           cat >> $GITHUB_STEP_SUMMARY <<EOF
           # Buildkite Pipeline Info
 
+          **Trigger:** $TRIGGER_TYPE
+
           | Field | Value |
           |-------|-------|
-          | **PR Author** | ${{ needs.check-member.outputs.pr_author }} |
-          | **Author Association** | ${{ needs.check-member.outputs.pr_author_association }} |
+          $AUTHOR_INFO
           | **PR Number** | #${{ steps.prepare.outputs.pr_number }} |
           | **Branch** | \`${{ steps.prepare.outputs.branch }}\` |
           | **Commit** | \`${{ steps.prepare.outputs.commit }}\` |
@@ -108,7 +105,6 @@ jobs:
 
   trigger-buildkite-pipeline:
     needs: prepare-buildkite-info
-    # if: github.repository == 'anza-xyz/agave-fork1'
     runs-on: ubuntu-24.04
     steps:
       - name: Trigger a Buildkite Build
