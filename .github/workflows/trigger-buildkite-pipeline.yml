@@ -1,0 +1,59 @@
+name: Trigger Buildkite Pipeline (Pull Request)
+
+on:
+  pull_request_target:
+    branches:
+      - master
+
+jobs:
+  # Commented out for now, will update later
+  # trigger-buildkite-pipeline:
+  #   if: github.repository == 'anza-xyz/agave-fork1'
+  #   runs-on: ubuntu-24.04
+  #   steps:
+  #     - name: Trigger a Buildkite Build
+  #       uses: "buildkite/trigger-pipeline-action@909fed762c73d5ae2b5d555ab910d66b3fae2670"  # v2.4.1
+  #       with:
+  #         buildkite_api_access_token: ${{ secrets.BUILDKITE_API_ACCESS_TOKEN }}
+  #         pipeline_uuid: "019e154e-0414-4b64-bcf0-f37a8c207ad0"
+  #         branch: "${{ github.ref_name }}"
+  #         build_env_vars: '{"TRIGGERED_BUILDKITE_TAG": "${{ github.ref_name }}"}'
+  #         commit: "HEAD"
+  #         message: ":github: Triggered from a GitHub Action"
+
+  prepare-buildkite-info:
+    # if: github.repository == 'anza-xyz/agave'
+    runs-on: ubuntu-24.04
+    outputs:
+      branch: ${{ steps.prepare.outputs.branch }}
+      message: ${{ steps.prepare.outputs.message }}
+      commit: ${{ steps.prepare.outputs.commit }}
+      pr_number: ${{ steps.prepare.outputs.pr_number }}
+    steps:
+      - name: Prepare Buildkite pipeline info
+        id: prepare
+        run: |
+          # Port of triggerPipeline logic - extract branch and message
+          PR_NUMBER="${{ github.event.pull_request.number }}"
+          COMMIT="${{ github.event.pull_request.head.sha }}"
+          COMMIT_SHORT="${COMMIT:0:8}"
+          TITLE="${{ github.event.pull_request.title }}"
+
+          BRANCH="pull/${PR_NUMBER}/head"
+          MESSAGE="PR#${PR_NUMBER} - ${COMMIT_SHORT} - ${TITLE} - ${USER}"
+
+          echo "branch=${BRANCH}" >> $GITHUB_OUTPUT
+          echo "message=${MESSAGE}" >> $GITHUB_OUTPUT
+          echo "commit=${COMMIT}" >> $GITHUB_OUTPUT
+          echo "pr_number=${PR_NUMBER}" >> $GITHUB_OUTPUT
+
+  debug-buildkite-info:
+    needs: prepare-buildkite-info
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Debug pipeline info
+        run: |
+          echo "PR Number: ${{ needs.prepare-buildkite-info.outputs.pr_number }}"
+          echo "Branch: ${{ needs.prepare-buildkite-info.outputs.branch }}"
+          echo "Message: ${{ needs.prepare-buildkite-info.outputs.message }}"
+          echo "PR Commit: ${{ needs.prepare-buildkite-info.outputs.commit }}"
