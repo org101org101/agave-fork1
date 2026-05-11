@@ -6,30 +6,69 @@ on:
       - master
 
 jobs:
+  check-member:
+    runs-on: ubuntu-24.04
+    outputs:
+      is_outside_contributor: ${{ steps.check.outputs.is_outside_contributor }}
+      pr_author: ${{ steps.check.outputs.pr_author }}
+      pr_author_association: ${{ steps.check.outputs.pr_author_association }}
+    steps:
+      - name: Check if member
+        id: check
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const prAuthorAssociation = context.payload.pull_request.author_association;
+            const prAuthor = context.payload.pull_request.user.login;
+            const insideAssociations = ['OWNER', 'MEMBER', 'COLLABORATOR'];
+            const isOutsideContributor = !insideAssociations.includes(prAuthorAssociation);
+
+            console.log(`PR Author: ${prAuthor}`);
+            console.log(`PR Author Association: ${prAuthorAssociation}`);
+            console.log(`Is outside contributor: ${isOutsideContributor}`);
+
+            core.setOutput('is_outside_contributor', isOutsideContributor.toString());
+            core.setOutput('pr_author', prAuthor);
+            core.setOutput('pr_author_association', prAuthorAssociation);
+
+      - name: Generate membership summary
+        run: |
+          IS_OUTSIDE="${{ steps.check.outputs.is_outside_contributor }}"
+
+          if [ "$IS_OUTSIDE" == "true" ]; then
+            STATUS_EMOJI="❌"
+            STATUS_TEXT="Outside Contributor"
+            STATUS_COLOR="🔴"
+          else
+            STATUS_EMOJI="✅"
+            STATUS_TEXT="Member"
+            STATUS_COLOR="🟢"
+          fi
+
+          cat >> $GITHUB_STEP_SUMMARY <<EOF
+          # Membership Check $STATUS_EMOJI
+
+          | Field | Value |
+          |-------|-------|
+          | **PR Author** | ${{ steps.check.outputs.pr_author }} |
+          | **Association** | \`${{ steps.check.outputs.pr_author_association }}\` |
+          | **Status** | $STATUS_COLOR $STATUS_TEXT |
+
+          ---
+
+          **Checked at:** $(date -u '+%Y-%m-%d %H:%M:%S UTC')
+          EOF
+
   prepare-buildkite-info:
-    # if: github.repository == 'anza-xyz/agave'
+    needs: check-member
+    if: needs.check-member.outputs.is_outside_contributor == 'false'
     runs-on: ubuntu-24.04
     outputs:
       branch: ${{ steps.prepare.outputs.branch }}
       message: ${{ steps.prepare.outputs.message }}
       commit: ${{ steps.prepare.outputs.commit }}
       pr_number: ${{ steps.prepare.outputs.pr_number }}
-      is_outside_contributor: ${{ steps.check-contributor.outputs.is_outside_contributor }}
     steps:
-      - name: Check if outside contributor
-        id: check-contributor
-        uses: actions/github-script@v7
-        with:
-          script: |
-            const prAuthorAssociation = context.payload.pull_request.author_association;
-            const insideAssociations = ['OWNER', 'MEMBER', 'COLLABORATOR'];
-            const isOutsideContributor = !insideAssociations.includes(prAuthorAssociation);
-
-            console.log(`PR Author: ${context.payload.pull_request.user.login}`);
-            console.log(`PR Author Association: ${prAuthorAssociation}`);
-            console.log(`Is outside contributor: ${isOutsideContributor}`);
-
-            core.setOutput('is_outside_contributor', isOutsideContributor.toString());
 
       - name: Prepare Buildkite pipeline info
         id: prepare
@@ -48,10 +87,6 @@ jobs:
           echo "commit=${COMMIT}" >> $GITHUB_OUTPUT
           echo "pr_number=${PR_NUMBER}" >> $GITHUB_OUTPUT
 
-  summary-buildkite-info:
-    needs: prepare-buildkite-info
-    runs-on: ubuntu-24.04
-    steps:
       - name: Generate pipeline summary
         run: |
           cat >> $GITHUB_STEP_SUMMARY <<EOF
@@ -59,14 +94,16 @@ jobs:
 
           | Field | Value |
           |-------|-------|
-          | **PR Number** | #${{ needs.prepare-buildkite-info.outputs.pr_number }} |
-          | **Branch** | \`${{ needs.prepare-buildkite-info.outputs.branch }}\` |
-          | **Commit** | \`${{ needs.prepare-buildkite-info.outputs.commit }}\` |
-          | **Message** | ${{ needs.prepare-buildkite-info.outputs.message }} |
-          | **Outside Contributor** | ${{ needs.prepare-buildkite-info.outputs.is_outside_contributor }} |
+          | **PR Author** | ${{ needs.check-member.outputs.pr_author }} |
+          | **Author Association** | ${{ needs.check-member.outputs.pr_author_association }} |
+          | **PR Number** | #${{ steps.prepare.outputs.pr_number }} |
+          | **Branch** | \`${{ steps.prepare.outputs.branch }}\` |
+          | **Commit** | \`${{ steps.prepare.outputs.commit }}\` |
+          | **Message** | ${{ steps.prepare.outputs.message }} |
 
           ---
 
+          **Triggered at:** $(date -u '+%Y-%m-%d %H:%M:%S UTC')
           EOF
 
   trigger-buildkite-pipeline:
