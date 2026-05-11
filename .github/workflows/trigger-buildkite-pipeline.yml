@@ -75,9 +75,9 @@ jobs:
     runs-on: ubuntu-24.04
     steps:
       - name: Trigger a Buildkite Build
-        uses: "buildkite/trigger-pipeline-action@41fd38b69189bf186cf69cf10ec807a850cae593"
+        uses: "buildkite/trigger-pipeline-action@909fed762c73d5ae2b5d555ab910d66b3fae2670" # v2.4.1
         with:
-          pipeline_uuid: ${{ vars.BUILDKITE_PIPELINE_UUID }}
+          pipeline: ${{ vars.BUILDKITE_PIPELINE }}
           buildkite_api_access_token: ${{ secrets.BUILDKITE_API_ACCESS_TOKEN }}
           branch: "${{ needs.prepare-buildkite-info.outputs.branch }}"
           build_meta_data: '{"pr_number": "${{ needs.prepare-buildkite-info.outputs.pr_number }}"}'
