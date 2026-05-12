@@ -78,9 +78,12 @@ jobs:
             echo "| Key | Value |"
             echo "|-----|-------|"
             echo "| Action | \`$ACTION\` |"
-            echo "| Label | \`$LABEL_NAME\` |"
-            echo "| Author | @$AUTHOR |"
-            echo "| Author Association | \`$AUTHOR_ASSOCIATION\` |"
+            if [ "$ACTION" = "labeled" ]; then
+              echo "| Label | \`$LABEL_NAME\` |"
+            else
+              echo "| Author | @$AUTHOR |"
+              echo "| Author Association | \`$AUTHOR_ASSOCIATION\` |"
+            fi
             echo ""
             echo "## Buildkite Pipeline Info"
             echo ""
