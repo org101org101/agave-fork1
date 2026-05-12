@@ -36,9 +36,9 @@ jobs:
             "https://api.github.com/repos/$REPO/collaborators/$AUTHOR")
 
           if [ "$HTTP_STATUS" = "204" ]; then
-            echo "is_collaborator=true" >> $GITHUB_OUTPUT
+            echo "is_collaborator=true" | tee -a $GITHUB_OUTPUT
           else
-            echo "is_collaborator=false" >> $GITHUB_OUTPUT
+            echo "is_collaborator=false"| tee -a $GITHUB_OUTPUT
           fi
 
       - name: Remove CI label
