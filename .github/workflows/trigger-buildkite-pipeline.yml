@@ -14,9 +14,6 @@ on:
 jobs:
   check:
     runs-on: ubuntu-24.04
-    if: >-
-      (github.event.action == 'labeled' && github.event.label.name == 'CI') ||
-      (github.event.action != 'labeled' && contains(fromJSON('["OWNER","MEMBER","COLLABORATOR"]'), github.event.pull_request.author_association))
     steps:
       - name: Print debug infomation
         if: runner.debug == '1'
@@ -37,6 +34,9 @@ jobs:
           fi
 
       - name: Check member or CI label
+        if: >-
+          (github.event.action == 'labeled' && github.event.label.name == 'CI') ||
+          (github.event.action != 'labeled' && contains(fromJSON('["OWNER","MEMBER","COLLABORATOR"]'), github.event.pull_request.author_association))
         id: check
         env:
           ACTION: ${{ github.event.action }}
