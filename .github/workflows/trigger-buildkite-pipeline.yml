@@ -28,10 +28,9 @@ jobs:
           AUTHOR: ${{ github.event.pull_request.user.login }}
           REPO: ${{ github.repository }}
         run: |
-          permission="$(
-            gh api "repos/$REPO/collaborators/$AUTHOR/permission" \
-              --jq '.permission' 2>/dev/null || echo none
-          )"
+          
+          gh api "repos/$REPO/collaborators/$AUTHOR/permission"
+          
 
           echo $permission
 
