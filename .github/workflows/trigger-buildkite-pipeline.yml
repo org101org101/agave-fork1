@@ -11,23 +11,39 @@ on:
       - reopened
       - labeled
 
+permissions:
+  contents: read
+  pull-requests: read
+
 jobs:
-  debug:
-    runs-on: ubuntu-24.04
-    steps:
-      - name: Debug trigger info
-        env:
-          EVENT: ${{ toJSON(github.event) }}
-        run: |
-          echo "=== Debug Trigger Info ==="
-          echo "$EVENT" | jq .
-          echo "=========================="
   trigger:
     runs-on: ubuntu-24.04
-    if: >-
-      (github.event.action == 'labeled' && github.event.label.name == 'CI') ||
-      (github.event.action != 'labeled' && contains(fromJSON('["OWNER","MEMBER","COLLABORATOR"]'), github.event.pull_request.author_association))
+    # if: >-
+      # (github.event.action == 'labeled' && github.event.label.name == 'CI') ||
+      # (github.event.action != 'labeled' && contains(fromJSON('["OWNER","MEMBER","COLLABORATOR"]'), github.event.pull_request.author_association))
     steps:
+      - id: check
+        env:
+          GH_TOKEN: ${{ github.token }}
+          AUTHOR: ${{ github.event.pull_request.user.login }}
+          REPO: ${{ github.repository }}
+        run: |
+          permission="$(
+            gh api "repos/$REPO/collaborators/$AUTHOR/permission" \
+              --jq '.permission' 2>/dev/null || echo none
+          )"
+
+          echo $permission
+
+          case "$permission" in
+            admin|write)
+              echo "trusted=true" >> "$GITHUB_OUTPUT"
+              ;;
+            *)
+              echo "trusted=false" >> "$GITHUB_OUTPUT"
+              ;;
+          esac
+
       - name: Remove CI label
         if: github.event.action == 'labeled'
         env:
