@@ -41,6 +41,8 @@ jobs:
    
   main:
     runs-on: ubuntu-24.04
+    needs:
+      - check
     steps:
       - name: Print debug event info
         if: runner.debug == '1'
