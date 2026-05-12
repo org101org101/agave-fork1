@@ -14,7 +14,7 @@ on:
 jobs:
   member_check:
     runs-on: ubuntu-24.04
-    if: github.repository == 'anza-xyz/agave' && github.event.action != 'labeled'
+    if: github.event.action != 'labeled'
     outputs:
       should_trigger: ${{ steps.check.outputs.should_trigger }}
     steps:
@@ -43,7 +43,7 @@ jobs:
 
   label_check:
     runs-on: ubuntu-24.04
-    if: github.repository == 'anza-xyz/agave' && github.event.action == 'labeled' && github.event.label.name == 'CI'
+    if: github.event.action == 'labeled' && github.event.label.name == 'CI'
     outputs:
       should_trigger: ${{ steps.check.outputs.should_trigger }}
     steps:
