@@ -25,7 +25,7 @@ jobs:
           REPO: ${{ github.repository }}
           USERNAME: ${{ github.event.pull_request.user.login }}
         run: |
-          ROLE_NAME=$(curl -L \
+          ROLE_NAME=$(curl -sS -L \
             -H "Accept: application/vnd.github+json" \
             -H "Authorization: Bearer $GH_TOKEN" \
             -H "X-GitHub-Api-Version: 2026-03-10" \
