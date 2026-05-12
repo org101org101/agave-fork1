@@ -14,9 +14,9 @@ on:
 jobs:
   debug:
     runs-on: ubuntu-24.04
-    if: ${{ runner.debug == '1' }}
     steps:
       - name: Print debug infomation
+        if: ${{ runner.debug == '1' }}
         env:
           ACTION: ${{ github.event.action }}
           LABEL_NAME: ${{ github.event.label.name }}
