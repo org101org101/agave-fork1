@@ -12,36 +12,17 @@ on:
       - labeled
 
 jobs:
-  main:
+  check:
     runs-on: ubuntu-24.04
+    if: >-
+      (github.event.action == 'labeled' && github.event.label.name == 'CI') ||
+      (github.event.action != 'labeled' && contains(fromJSON('["OWNER","MEMBER","COLLABORATOR"]'), github.event.pull_request.author_association))
     steps:
-      - name: Generate debug event summary
-        if: runner.debug == '1'
-        env:
-          ACTION: ${{ github.event.action }}
-          LABEL_NAME: ${{ github.event.label.name }}
-          PR_AUTHOR: ${{ github.event.pull_request.user.login }}
-          PR_AUTHOR_ASSOCIATION: ${{ github.event.pull_request.author_association }}
-        run: |
-          {
-            printf '# Buildkite Trigger Event Debug\n\n'
-            printf '| Field | Value |\n'
-            printf '|-------|-------|\n'
-            printf '| Action | `%s` |\n' "$ACTION"
-
-            if [ "$ACTION" = "labeled" ]; then
-              printf '| Label | `%s` |\n' "$LABEL_NAME"
-            else
-              printf '| PR Author | %s |\n' "$PR_AUTHOR"
-              printf '| Author Association | `%s` |\n' "$PR_AUTHOR_ASSOCIATION"
-            fi
-          } >> "$GITHUB_STEP_SUMMARY"
-
       - name: Check member or CI label
         id: check
-        if: ${{ 
+        if: >-
           (github.event.action == 'labeled' && github.event.label.name == 'CI') ||
-          (github.event.action != 'labeled' && contains(fromJSON('["OWNER","MEMBER","COLLABORATOR"]'), github.event.pull_request.author_association)) }}
+          (github.event.action != 'labeled' && contains(fromJSON('["OWNER","MEMBER","COLLABORATOR"]'), github.event.pull_request.author_association))
         env:
           ACTION: ${{ github.event.action }}
           LABEL_NAME: ${{ github.event.label.name }}
@@ -57,6 +38,27 @@ jobs:
             printf 'should_trigger=true\n'
             printf 'trigger_type=%s\n' "$TRIGGER_TYPE"
           } >> "$GITHUB_OUTPUT"
+   
+  main:
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Print debug event info
+        if: runner.debug == '1'
+        env:
+          ACTION: ${{ github.event.action }}
+          LABEL_NAME: ${{ github.event.label.name }}
+          PR_AUTHOR: ${{ github.event.pull_request.user.login }}
+          PR_AUTHOR_ASSOCIATION: ${{ github.event.pull_request.author_association }}
+        run: |
+          echo "Buildkite trigger event debug"
+          echo "Action: ${ACTION}"
+
+          if [ "$ACTION" = "labeled" ]; then
+            echo "Label: ${LABEL_NAME}"
+          else
+            echo "PR Author: ${PR_AUTHOR}"
+            echo "Author Association: ${PR_AUTHOR_ASSOCIATION}"
+          fi
 
       - name: Remove CI label
         if: github.event.action == 'labeled' && steps.check.outputs.should_trigger == 'true'
@@ -100,8 +102,8 @@ jobs:
             printf 'pr_number=%s\n' "$PR_NUMBER"
           } >> "$GITHUB_OUTPUT"
 
-      - name: Generate debug pipeline summary
-        if: steps.check.outputs.should_trigger == 'true'
+      - name: Print debug pipeline info
+        if: runner.debug == '1' && steps.check.outputs.should_trigger == 'true'
         env:
           BRANCH: ${{ steps.prepare.outputs.branch }}
           BUILD_META_DATA: ${{ steps.prepare.outputs.build_meta_data }}
@@ -111,18 +113,14 @@ jobs:
           PR_NUMBER: ${{ steps.prepare.outputs.pr_number }}
           TRIGGER_TYPE: ${{ steps.check.outputs.trigger_type }}
         run: |
-          {
-            printf '# Buildkite Pipeline Debug\n\n'
-            printf '| Field | Value |\n'
-            printf '|-------|-------|\n'
-            printf '| Trigger Type | `%s` |\n' "$TRIGGER_TYPE"
-            printf '| Pipeline | `%s` |\n' "$PIPELINE"
-            printf '| PR Number | #%s |\n' "$PR_NUMBER"
-            printf '| Branch | `%s` |\n' "$BRANCH"
-            printf '| Commit | `%s` |\n' "$COMMIT"
-            printf '| Message | %s |\n' "$MESSAGE"
-            printf '| Build Metadata | `%s` |\n' "$BUILD_META_DATA"
-          } >> "$GITHUB_STEP_SUMMARY"
+          echo "Buildkite pipeline debug"
+          echo "Trigger Type: ${TRIGGER_TYPE}"
+          echo "Pipeline: ${PIPELINE}"
+          echo "PR Number: #${PR_NUMBER}"
+          echo "Branch: ${BRANCH}"
+          echo "Commit: ${COMMIT}"
+          echo "Message: ${MESSAGE}"
+          echo "Build Metadata: ${BUILD_META_DATA}"
 
       - name: Trigger a Buildkite Build
         if: steps.check.outputs.should_trigger == 'true'
