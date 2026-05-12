@@ -17,18 +17,10 @@ jobs:
     steps:
       - name: Debug trigger info
         env:
-          ACTION: ${{ github.event.action }}
-          AUTHOR: ${{ github.event.pull_request.user.login }}
-          AUTHOR_ASSOCIATION: ${{ github.event.pull_request.author_association }}
-          LABEL_NAME: ${{ github.event.label.name }}
-          PR_NUMBER: ${{ github.event.pull_request.number }}
+          EVENT: ${{ toJSON(github.event) }}
         run: |
           echo "=== Debug Trigger Info ==="
-          echo "Action: $ACTION"
-          echo "Label: $LABEL_NAME"
-          echo "Author: $AUTHOR"
-          echo "Author Association: $AUTHOR_ASSOCIATION"
-          echo "PR Number: $PR_NUMBER"
+          echo "$EVENT" | jq .
           echo "=========================="
   trigger:
     runs-on: ubuntu-24.04
