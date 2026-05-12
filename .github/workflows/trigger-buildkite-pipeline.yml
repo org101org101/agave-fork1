@@ -16,35 +16,33 @@ permissions:
   pull-requests: read
 
 jobs:
-  trigger:
+  check:
     runs-on: ubuntu-24.04
     # if: >-
       # (github.event.action == 'labeled' && github.event.label.name == 'CI') ||
       # (github.event.action != 'labeled' && contains(fromJSON('["OWNER","MEMBER","COLLABORATOR"]'), github.event.pull_request.author_association))
     steps:
-      - id: check
+      - name: Check if a collaborator
+        id: check
         env:
           GH_TOKEN: ${{ github.token }}
           AUTHOR: ${{ github.event.pull_request.user.login }}
           REPO: ${{ github.repository }}
         run: |
-          
-          gh api "repos/$REPO/collaborators/$AUTHOR/permission"
-          
+          HTTP_STATUS=$(curl -s -o /dev/null -w "%{http_code}" \
+            -H "Accept: application/vnd.github+json" \
+            -H "Authorization: Bearer $GH_TOKEN" \
+            -H "X-GitHub-Api-Version: 2026-03-10" \
+            "https://api.github.com/repos/$REPO/collaborators/$AUTHOR")
 
-          echo $permission
-
-          case "$permission" in
-            admin|write)
-              echo "trusted=true" >> "$GITHUB_OUTPUT"
-              ;;
-            *)
-              echo "trusted=false" >> "$GITHUB_OUTPUT"
-              ;;
-          esac
+          if [ "$HTTP_STATUS" = "204" ]; then
+            echo "is_collaborator=true" >> $GITHUB_OUTPUT
+          else
+            echo "is_collaborator=false" >> $GITHUB_OUTPUT
+          fi
 
       - name: Remove CI label
-        if: github.event.action == 'labeled'
+        if: github.event.action == 'labeled' && github.event.label.name == 'CI'
         env:
           GH_TOKEN: ${{ github.token }}
           PR_NUMBER: ${{ github.event.pull_request.number }}
@@ -56,6 +54,7 @@ jobs:
             || echo "CI label was already removed."
 
       - name: Prepare Buildkite pipeline info
+        if: (github.event.action == 'labeled' && github.event.label.name == 'CI') || steps.check.outputs.is_collaborator == 'true'
         id: prepare
         env:
           BUILDKITE_PIPELINE: ${{ vars.BUILDKITE_PIPELINE }}
@@ -76,6 +75,7 @@ jobs:
           echo "pr_number=$PR_NUMBER" | tee -a $GITHUB_OUTPUT
 
       - name: Trigger a Buildkite Build
+        if: (github.event.action == 'labeled' && github.event.label.name == 'CI') || steps.check.outputs.is_collaborator == 'true'
         uses: "buildkite/trigger-pipeline-action@909fed762c73d5ae2b5d555ab910d66b3fae2670" # v2.4.1
         with:
           pipeline: ${{ steps.prepare.outputs.pipeline }}
@@ -86,6 +86,7 @@ jobs:
           message: "${{ steps.prepare.outputs.message }}"
 
       - name: Summary
+        if: (github.event.action == 'labeled' && github.event.label.name == 'CI') || steps.check.outputs.is_collaborator == 'true'
         env:
           ACTION: ${{ github.event.action }}
           AUTHOR: ${{ github.event.pull_request.user.login }}
