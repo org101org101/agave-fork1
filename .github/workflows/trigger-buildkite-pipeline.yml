@@ -26,20 +26,14 @@ jobs:
         id: check
         env:
           GH_TOKEN: ${{ github.token }}
-          AUTHOR: ${{ github.event.pull_request.user.login }}
+          USERNAME: ${{ github.event.pull_request.user.login }}
           REPO: ${{ github.repository }}
         run: |
-          HTTP_STATUS=$(curl -s -o /dev/null -w "%{http_code}" \
+          curl -L \
             -H "Accept: application/vnd.github+json" \
             -H "Authorization: Bearer $GH_TOKEN" \
             -H "X-GitHub-Api-Version: 2026-03-10" \
-            "https://api.github.com/repos/$REPO/collaborators/$AUTHOR")
-
-          if [ "$HTTP_STATUS" = "204" ]; then
-            echo "is_collaborator=true" | tee -a $GITHUB_OUTPUT
-          else
-            echo "is_collaborator=false"| tee -a $GITHUB_OUTPUT
-          fi
+            https://api.github.com/repos/$REPO/collaborators/$USERNAME/permission
 
       - name: Remove CI label
         if: github.event.action == 'labeled' && github.event.label.name == 'CI'
