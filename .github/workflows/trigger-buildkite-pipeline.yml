@@ -12,6 +12,27 @@ on:
       - labeled
 
 jobs:
+  debug:
+    runs-on: ubuntu-24.04
+    if: runner.debug == '1'
+    steps:
+      - name: Print debug infomation
+        env:
+          ACTION: ${{ github.event.action }}
+          LABEL_NAME: ${{ github.event.label.name }}
+          PR_AUTHOR: ${{ github.event.pull_request.user.login }}
+          PR_AUTHOR_ASSOCIATION: ${{ github.event.pull_request.author_association }}
+        run: |
+          echo "Buildkite trigger event debug"
+          echo "Action: ${ACTION}"
+
+          if [ "$ACTION" = "labeled" ]; then
+            echo "Label: ${LABEL_NAME}"
+          else
+            echo "PR Author: ${PR_AUTHOR}"
+            echo "Author Association: ${PR_AUTHOR_ASSOCIATION}"
+          fi
+
   check:
     runs-on: ubuntu-24.04
     if: >-
@@ -20,9 +41,6 @@ jobs:
     steps:
       - name: Check member or CI label
         id: check
-        if: >-
-          (github.event.action == 'labeled' && github.event.label.name == 'CI') ||
-          (github.event.action != 'labeled' && contains(fromJSON('["OWNER","MEMBER","COLLABORATOR"]'), github.event.pull_request.author_association))
         env:
           ACTION: ${{ github.event.action }}
           LABEL_NAME: ${{ github.event.label.name }}
