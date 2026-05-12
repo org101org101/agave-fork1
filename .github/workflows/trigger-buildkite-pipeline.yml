@@ -151,3 +151,14 @@ jobs:
           build_meta_data: "${{ steps.prepare.outputs.build_meta_data }}"
           commit: "${{ steps.prepare.outputs.commit }}"
           message: "${{ steps.prepare.outputs.message }}"
+
+  result:
+      runs-on: ubuntu-24.04
+      if: always() && needs.check.result == 'success'
+      needs:
+        - check
+        - main
+      steps:
+        - name: Check main result
+          if: needs.main.result != 'success'
+          run: exit 1
