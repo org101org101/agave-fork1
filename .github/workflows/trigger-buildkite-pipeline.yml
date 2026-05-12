@@ -11,44 +11,64 @@ on:
       - reopened
       - labeled
 
-permissions:
-  contents: read
-  pull-requests: read
-
 jobs:
-  check:
+  member_check:
     runs-on: ubuntu-24.04
-    # if: >-
-      # (github.event.action == 'labeled' && github.event.label.name == 'CI') ||
-      # (github.event.action != 'labeled' && contains(fromJSON('["OWNER","MEMBER","COLLABORATOR"]'), github.event.pull_request.author_association))
+    if: github.event.action != 'labeled'
+    outputs:
+      should_trigger: ${{ steps.check.outputs.should_trigger }}
     steps:
-      - name: Check if a collaborator
+      - name: Check permission
         id: check
         env:
           GH_TOKEN: ${{ github.token }}
-          USERNAME: ${{ github.event.pull_request.user.login }}
           REPO: ${{ github.repository }}
+          USERNAME: ${{ github.event.pull_request.user.login }}
         run: |
-          curl -L \
+          ROLE_NAME=$(curl -L \
             -H "Accept: application/vnd.github+json" \
             -H "Authorization: Bearer $GH_TOKEN" \
             -H "X-GitHub-Api-Version: 2026-03-10" \
-            https://api.github.com/repos/$REPO/collaborators/$USERNAME/permission
+            https://api.github.com/repos/$REPO/collaborators/$USERNAME/permission | jq -r ".role_name")
 
+          case "$ROLE_NAME" in
+            admin|maintain|write|triage)
+              echo "should_trigger=true" >> $GITHUB_OUTPUT
+              ;;
+            *)
+              echo "should_trigger=false" >> $GITHUB_OUTPUT
+              exit 1
+              ;;
+          esac
+
+  label_check:
+    runs-on: ubuntu-24.04
+    if: github.event.action == 'labeled' && github.event.label.name == 'CI'
+    outputs:
+      should_trigger: ${{ steps.check.outputs.should_trigger }}
+    steps:
       - name: Remove CI label
-        if: github.event.action == 'labeled' && github.event.label.name == 'CI'
+        id: check
         env:
           GH_TOKEN: ${{ github.token }}
           PR_NUMBER: ${{ github.event.pull_request.number }}
         run: |
+          echo "should_trigger=true" >> $GITHUB_OUTPUT
+
           curl -sS -X DELETE \
             -H "Accept: application/vnd.github+json" \
             -H "Authorization: Bearer $GH_TOKEN" \
             "https://api.github.com/repos/${{ github.repository }}/issues/$PR_NUMBER/labels/CI" \
             || echo "CI label was already removed."
 
+  trigger:
+    runs-on: ubuntu-24.04
+    needs: [member_check, label_check]
+    if: >-
+      always() &&
+      (needs.member_check.outputs.should_trigger == 'true' || needs.label_check.outputs.should_trigger == 'true')
+    steps:
       - name: Prepare Buildkite pipeline info
-        if: (github.event.action == 'labeled' && github.event.label.name == 'CI') || steps.check.outputs.is_collaborator == 'true'
         id: prepare
         env:
           BUILDKITE_PIPELINE: ${{ vars.BUILDKITE_PIPELINE }}
@@ -69,7 +89,6 @@ jobs:
           echo "pr_number=$PR_NUMBER" | tee -a $GITHUB_OUTPUT
 
       - name: Trigger a Buildkite Build
-        if: (github.event.action == 'labeled' && github.event.label.name == 'CI') || steps.check.outputs.is_collaborator == 'true'
         uses: "buildkite/trigger-pipeline-action@909fed762c73d5ae2b5d555ab910d66b3fae2670" # v2.4.1
         with:
           pipeline: ${{ steps.prepare.outputs.pipeline }}
@@ -80,31 +99,14 @@ jobs:
           message: "${{ steps.prepare.outputs.message }}"
 
       - name: Summary
-        if: (github.event.action == 'labeled' && github.event.label.name == 'CI') || steps.check.outputs.is_collaborator == 'true'
         env:
-          ACTION: ${{ github.event.action }}
-          AUTHOR: ${{ github.event.pull_request.user.login }}
-          AUTHOR_ASSOCIATION: ${{ github.event.pull_request.author_association }}
           BRANCH: ${{ steps.prepare.outputs.branch }}
           BUILDKITE_PIPELINE: ${{ vars.BUILDKITE_PIPELINE }}
           COMMIT: ${{ github.event.pull_request.head.sha }}
-          LABEL_NAME: ${{ github.event.label.name }}
           MESSAGE: ${{ steps.prepare.outputs.message }}
           PR_NUMBER: ${{ github.event.pull_request.number }}
         run: |
           {
-            echo "## Trigger Info"
-            echo ""
-            echo "| Key | Value |"
-            echo "|-----|-------|"
-            echo "| Action | \`$ACTION\` |"
-            if [ "$ACTION" = "labeled" ]; then
-              echo "| Label | \`$LABEL_NAME\` |"
-            else
-              echo "| Author | @$AUTHOR |"
-              echo "| Author Association | \`$AUTHOR_ASSOCIATION\` |"
-            fi
-            echo ""
             echo "## Buildkite Pipeline Info"
             echo ""
             echo "| Key | Value |"
