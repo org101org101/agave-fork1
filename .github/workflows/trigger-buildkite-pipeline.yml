@@ -12,11 +12,14 @@ on:
       - labeled
 
 jobs:
-  debug:
+  check:
     runs-on: ubuntu-24.04
-    if: runner.debug == '1'
+    if: >-
+      (github.event.action == 'labeled' && github.event.label.name == 'CI') ||
+      (github.event.action != 'labeled' && contains(fromJSON('["OWNER","MEMBER","COLLABORATOR"]'), github.event.pull_request.author_association))
     steps:
       - name: Print debug infomation
+        if: runner.debug == '1'
         env:
           ACTION: ${{ github.event.action }}
           LABEL_NAME: ${{ github.event.label.name }}
@@ -33,12 +36,6 @@ jobs:
             echo "Author Association: ${PR_AUTHOR_ASSOCIATION}"
           fi
 
-  check:
-    runs-on: ubuntu-24.04
-    if: >-
-      (github.event.action == 'labeled' && github.event.label.name == 'CI') ||
-      (github.event.action != 'labeled' && contains(fromJSON('["OWNER","MEMBER","COLLABORATOR"]'), github.event.pull_request.author_association))
-    steps:
       - name: Check member or CI label
         id: check
         env:
