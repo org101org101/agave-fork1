@@ -12,133 +12,125 @@ on:
       - labeled
 
 jobs:
-  trigger-buildkite-pipeline:
+  main:
     runs-on: ubuntu-24.04
     steps:
-      - name: Check trigger eligibility
+      - name: Generate debug event summary
+        if: runner.debug == '1'
+        env:
+          ACTION: ${{ github.event.action }}
+          LABEL_NAME: ${{ github.event.label.name }}
+          PR_AUTHOR: ${{ github.event.pull_request.user.login }}
+          PR_AUTHOR_ASSOCIATION: ${{ github.event.pull_request.author_association }}
+        run: |
+          {
+            printf '# Buildkite Trigger Event Debug\n\n'
+            printf '| Field | Value |\n'
+            printf '|-------|-------|\n'
+            printf '| Action | `%s` |\n' "$ACTION"
+
+            if [ "$ACTION" = "labeled" ]; then
+              printf '| Label | `%s` |\n' "$LABEL_NAME"
+            else
+              printf '| PR Author | %s |\n' "$PR_AUTHOR"
+              printf '| Author Association | `%s` |\n' "$PR_AUTHOR_ASSOCIATION"
+            fi
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Check member or CI label
         id: check
+        if: ${{ 
+          (github.event.action == 'labeled' && github.event.label.name == 'CI') ||
+          (github.event.action != 'labeled' && contains(fromJSON('["OWNER","MEMBER","COLLABORATOR"]'), github.event.pull_request.author_association)) }}
+        env:
+          ACTION: ${{ github.event.action }}
+          LABEL_NAME: ${{ github.event.label.name }}
+        run: |
+          if [ "$ACTION" = "labeled" ]; then
+            TRIGGER_TYPE="CI Label"
+          else
+            TRIGGER_TYPE="Pull Request Event"
+          fi
+
+          {
+            printf 'label_name=%s\n' "$LABEL_NAME"
+            printf 'should_trigger=true\n'
+            printf 'trigger_type=%s\n' "$TRIGGER_TYPE"
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Remove CI label
+        if: github.event.action == 'labeled' && steps.check.outputs.should_trigger == 'true'
         uses: actions/github-script@v7
         with:
           script: |
-            const action = context.payload.action;
-            const pr = context.payload.pull_request;
-            const prAuthorAssociation = pr.author_association;
-            const prAuthor = pr.user.login;
-            const insideAssociations = ['OWNER', 'MEMBER', 'COLLABORATOR'];
-            const isOutsideContributor = !insideAssociations.includes(prAuthorAssociation);
-
-            let shouldTrigger = false;
-            let triggerType = '';
-            let labelName = '';
-
-            if (action === 'labeled') {
-              labelName = context.payload.label.name;
-              const isCiLabel = labelName === 'CI';
-
-              console.log(`Label added: ${labelName}`);
-              console.log(`Is CI label: ${isCiLabel}`);
-
-              shouldTrigger = isCiLabel;
-              triggerType = 'CI Label';
-
-              if (isCiLabel) {
-                console.log('Removing CI label...');
-                await github.rest.issues.removeLabel({
-                  owner: context.repo.owner,
-                  repo: context.repo.repo,
-                  issue_number: pr.number,
-                  name: 'CI'
-                });
-                console.log('CI label removed');
+            try {
+              await github.rest.issues.removeLabel({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: context.payload.pull_request.number,
+                name: 'CI',
+              });
+            } catch (error) {
+              if (error.status === 404) {
+                core.warning('CI label was already removed.');
+              } else {
+                throw error;
               }
-            } else {
-              console.log(`PR Author: ${prAuthor}`);
-              console.log(`PR Author Association: ${prAuthorAssociation}`);
-              console.log(`Is outside contributor: ${isOutsideContributor}`);
-
-              shouldTrigger = !isOutsideContributor;
-              triggerType = 'Pull Request Event';
             }
-
-            core.setOutput('should_trigger', shouldTrigger.toString());
-            core.setOutput('trigger_type', triggerType);
-            core.setOutput('label_name', labelName);
-            core.setOutput('pr_author', prAuthor);
-            core.setOutput('pr_author_association', prAuthorAssociation);
-            core.setOutput('is_outside_contributor', isOutsideContributor.toString());
 
       - name: Prepare Buildkite pipeline info
         id: prepare
         if: steps.check.outputs.should_trigger == 'true'
+        env:
+          BUILDKITE_PIPELINE: ${{ vars.BUILDKITE_PIPELINE }}
+          COMMIT: ${{ github.event.pull_request.head.sha }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          TITLE: ${{ github.event.pull_request.title }}
         run: |
-          PR_NUMBER="${{ github.event.pull_request.number }}"
-          COMMIT="${{ github.event.pull_request.head.sha }}"
           COMMIT_SHORT="${COMMIT:0:8}"
-          TITLE="${{ github.event.pull_request.title }}"
-
           BRANCH="pull/${PR_NUMBER}/head"
           MESSAGE="PR#${PR_NUMBER} - ${COMMIT_SHORT} - ${TITLE}"
 
-          echo "branch=${BRANCH}" >> $GITHUB_OUTPUT
-          echo "message=${MESSAGE}" >> $GITHUB_OUTPUT
-          echo "commit=${COMMIT}" >> $GITHUB_OUTPUT
-          echo "pr_number=${PR_NUMBER}" >> $GITHUB_OUTPUT
+          {
+            printf 'branch=%s\n' "$BRANCH"
+            printf 'build_meta_data={"pr_number":"%s"}\n' "$PR_NUMBER"
+            printf 'commit=%s\n' "$COMMIT"
+            printf 'message=%s\n' "$MESSAGE"
+            printf 'pipeline=%s\n' "$BUILDKITE_PIPELINE"
+            printf 'pr_number=%s\n' "$PR_NUMBER"
+          } >> "$GITHUB_OUTPUT"
 
-      - name: Generate pipeline summary
-        if: always()
+      - name: Generate debug pipeline summary
+        if: steps.check.outputs.should_trigger == 'true'
+        env:
+          BRANCH: ${{ steps.prepare.outputs.branch }}
+          BUILD_META_DATA: ${{ steps.prepare.outputs.build_meta_data }}
+          COMMIT: ${{ steps.prepare.outputs.commit }}
+          MESSAGE: ${{ steps.prepare.outputs.message }}
+          PIPELINE: ${{ steps.prepare.outputs.pipeline }}
+          PR_NUMBER: ${{ steps.prepare.outputs.pr_number }}
+          TRIGGER_TYPE: ${{ steps.check.outputs.trigger_type }}
         run: |
-          if [ "${{ steps.check.outputs.should_trigger }}" == "true" ]; then
-            SUMMARY_TITLE="Buildkite Pipeline Info"
-            if [ "${{ github.event.action }}" == "labeled" ]; then
-              TRIGGER_TYPE="🏷️ ${{ steps.check.outputs.trigger_type }}"
-              EXTRA_INFO="| **Label** | \`${{ steps.check.outputs.label_name }}\` |"
-            else
-              TRIGGER_TYPE="📝 ${{ steps.check.outputs.trigger_type }}"
-              EXTRA_INFO="| **PR Author** | ${{ steps.check.outputs.pr_author }} |
-          | **Author Association** | \`${{ steps.check.outputs.pr_author_association }}\` |"
-            fi
-
-            cat >> $GITHUB_STEP_SUMMARY <<EOF
-          # ${SUMMARY_TITLE}
-
-          **Trigger:** $TRIGGER_TYPE
-
-          | Field | Value |
-          |-------|-------|
-          $EXTRA_INFO
-          | **PR Number** | #${{ steps.prepare.outputs.pr_number }} |
-          | **Branch** | \`${{ steps.prepare.outputs.branch }}\` |
-          | **Commit** | \`${{ steps.prepare.outputs.commit }}\` |
-          | **Message** | ${{ steps.prepare.outputs.message }} |
-
-          ---
-
-          **Triggered at:** $(date -u '+%Y-%m-%d %H:%M:%S UTC')
-          EOF
-          else
-            cat >> $GITHUB_STEP_SUMMARY <<EOF
-          # Buildkite Pipeline Skipped
-
-          | Field | Value |
-          |-------|-------|
-          | **Action** | \`${{ github.event.action }}\` |
-          | **PR Author** | ${{ steps.check.outputs.pr_author }} |
-          | **Author Association** | \`${{ steps.check.outputs.pr_author_association }}\` |
-          | **Outside Contributor** | \`${{ steps.check.outputs.is_outside_contributor }}\` |
-
-          **Reason:** This event does not meet the criteria to trigger Buildkite.
-
-          **Evaluated at:** $(date -u '+%Y-%m-%d %H:%M:%S UTC')
-          EOF
-          fi
+          {
+            printf '# Buildkite Pipeline Debug\n\n'
+            printf '| Field | Value |\n'
+            printf '|-------|-------|\n'
+            printf '| Trigger Type | `%s` |\n' "$TRIGGER_TYPE"
+            printf '| Pipeline | `%s` |\n' "$PIPELINE"
+            printf '| PR Number | #%s |\n' "$PR_NUMBER"
+            printf '| Branch | `%s` |\n' "$BRANCH"
+            printf '| Commit | `%s` |\n' "$COMMIT"
+            printf '| Message | %s |\n' "$MESSAGE"
+            printf '| Build Metadata | `%s` |\n' "$BUILD_META_DATA"
+          } >> "$GITHUB_STEP_SUMMARY"
 
       - name: Trigger a Buildkite Build
         if: steps.check.outputs.should_trigger == 'true'
         uses: "buildkite/trigger-pipeline-action@909fed762c73d5ae2b5d555ab910d66b3fae2670" # v2.4.1
         with:
-          pipeline: ${{ vars.BUILDKITE_PIPELINE }}
+          pipeline: ${{ steps.prepare.outputs.pipeline }}
           buildkite_api_access_token: ${{ secrets.BUILDKITE_API_ACCESS_TOKEN }}
           branch: "${{ steps.prepare.outputs.branch }}"
-          build_meta_data: '{"pr_number": "${{ steps.prepare.outputs.pr_number }}"}'
+          build_meta_data: "${{ steps.prepare.outputs.build_meta_data }}"
           commit: "${{ steps.prepare.outputs.commit }}"
           message: "${{ steps.prepare.outputs.message }}"
