@@ -14,7 +14,7 @@ on:
 jobs:
   member_check:
     runs-on: ubuntu-24.04
-    if: github.event.action != 'labeled'
+    if: github.repository == 'anza-xyz/agave' && github.event.action != 'labeled'
     outputs:
       should_trigger: ${{ steps.check.outputs.should_trigger }}
     steps:
@@ -43,7 +43,7 @@ jobs:
 
   label_check:
     runs-on: ubuntu-24.04
-    if: github.event.action == 'labeled' && github.event.label.name == 'CI'
+    if: github.repository == 'anza-xyz/agave' && github.event.action == 'labeled' && github.event.label.name == 'CI'
     outputs:
       should_trigger: ${{ steps.check.outputs.should_trigger }}
     steps:
@@ -63,7 +63,9 @@ jobs:
 
   trigger:
     runs-on: ubuntu-24.04
-    needs: [member_check, label_check]
+    needs:
+      - member_check
+      - label_check
     if: >-
       always() &&
       (needs.member_check.outputs.should_trigger == 'true' || needs.label_check.outputs.should_trigger == 'true')
@@ -74,11 +76,10 @@ jobs:
           BUILDKITE_PIPELINE: ${{ vars.BUILDKITE_PIPELINE }}
           COMMIT: ${{ github.event.pull_request.head.sha }}
           PR_NUMBER: ${{ github.event.pull_request.number }}
-          TITLE: ${{ github.event.pull_request.title }}
         run: |
           COMMIT_SHORT="${COMMIT:0:8}"
           BRANCH="pull/${PR_NUMBER}/head"
-          MESSAGE="PR#${PR_NUMBER} - ${COMMIT_SHORT} - ${TITLE}"
+          MESSAGE="PR#${PR_NUMBER} - ${COMMIT_SHORT}"
           BUILD_META_DATA="{\"pr_number\":\"${PR_NUMBER}\"}"
 
           echo "branch=$BRANCH" | tee -a $GITHUB_OUTPUT
