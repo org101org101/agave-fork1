@@ -100,7 +100,7 @@ jobs:
 
       - name: Trigger a Buildkite Build
         env:
-          PORTAL_URL: ${{ vars.BUILDKITE_PORTAL_URL }}
+          PORTAL_URL: ${{ secrets.BUILDKITE_PORTAL_URL }}
           PORTAL_TOKEN: ${{ secrets.BUILDKITE_PORTAL_TOKEN }}
           BRANCH: ${{ steps.prepare.outputs.branch }}
           BASE_BRANCH: ${{ github.event.pull_request.base.ref }}
@@ -108,10 +108,6 @@ jobs:
           MESSAGE: ${{ steps.prepare.outputs.message }}
           PR_NUMBER: ${{ steps.prepare.outputs.pr_number }}
         run: |
-          # Variables are sent at the top level of the JSON body (Buildkite
-          # Portals convention), not wrapped under a "variables" key.
-          # GraphQL can't interpolate a variable inside a string literal, so the
-          # full "KEY=value" env entry is built here and passed as one variable.
           PAYLOAD=$(jq -n \
             --arg commit "$COMMIT" \
             --arg branch "$BRANCH" \
