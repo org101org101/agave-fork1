@@ -2,6 +2,8 @@ name: Trigger Buildkite Pipeline (Pull Request)
 
 on:
   pull_request_target:
+    branches:
+      - master
     types:
       - opened
       - synchronize
@@ -114,19 +116,31 @@ jobs:
             --arg baseEnv "BUILDKITE_PULL_REQUEST_BASE_BRANCH=${BASE_BRANCH}" \
             '{commit: $commit, branch: $branch, message: $message, prNumber: $prNumber, baseEnv: $baseEnv}')
 
-          RESPONSE=$(curl -sS -X POST "$PORTAL_URL" \
+          HTTP_OK=true
+          RESPONSE=$(curl -sS --fail-with-body -X POST "$PORTAL_URL" \
             -H "Authorization: Bearer $PORTAL_TOKEN" \
             -H "Content-Type: application/json" \
-            -d "$PAYLOAD")
+            -d "$PAYLOAD") || HTTP_OK=false
 
-          echo "$RESPONSE" | jq .
+          echo "$RESPONSE" | jq . || echo "$RESPONSE"
+
+          if [ "$HTTP_OK" != "true" ]; then
+            echo "::error::Buildkite portal request failed"
+            exit 1
+          fi
 
           if [ "$(echo "$RESPONSE" | jq 'has("errors")')" = "true" ]; then
             echo "::error::Buildkite portal returned errors"
             exit 1
           fi
 
-          echo "Triggered build: $(echo "$RESPONSE" | jq -r '.data.buildCreate.build.url')"
+          BUILD_URL=$(echo "$RESPONSE" | jq -r '.data.buildCreate.build.url // empty')
+          if [ -z "$BUILD_URL" ]; then
+            echo "::error::Buildkite portal response contained no build URL"
+            exit 1
+          fi
+
+          echo "Triggered build: $BUILD_URL"
 
       - name: Summary
         env:
