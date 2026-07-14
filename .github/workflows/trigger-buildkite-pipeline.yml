@@ -99,6 +99,7 @@ jobs:
           echo "pr_number=$PR_NUMBER" | tee -a $GITHUB_OUTPUT
 
       - name: Trigger a Buildkite Build
+        id: trigger
         env:
           PORTAL_URL: ${{ secrets.BUILDKITE_PORTAL_URL }}
           PORTAL_TOKEN: ${{ secrets.BUILDKITE_PORTAL_TOKEN }}
@@ -141,11 +142,13 @@ jobs:
           fi
 
           echo "Triggered build: $BUILD_URL"
+          echo "build_url=$BUILD_URL" | tee -a $GITHUB_OUTPUT
 
       - name: Summary
         env:
           BRANCH: ${{ steps.prepare.outputs.branch }}
           BUILDKITE_PIPELINE: ${{ vars.BUILDKITE_PIPELINE }}
+          BUILD_URL: ${{ steps.trigger.outputs.build_url }}
           COMMIT: ${{ github.event.pull_request.head.sha }}
           MESSAGE: ${{ steps.prepare.outputs.message }}
           PR_NUMBER: ${{ github.event.pull_request.number }}
@@ -160,4 +163,5 @@ jobs:
             echo "| Commit | \`$COMMIT\` |"
             echo "| PR Number | #$PR_NUMBER |"
             echo "| Message | $MESSAGE |"
+            echo "| Build | $BUILD_URL |"
           } >> $GITHUB_STEP_SUMMARY
