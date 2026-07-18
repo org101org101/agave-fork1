@@ -11,8 +11,11 @@ set -e
 cd "$(dirname "$0")"/..
 source ci/_
 
-_ cargo xtask generate-pipeline
-echo +++ pipeline
-cat pipeline.yml
+echo $BUILDKITE_AGENT_NAME
 
-_ buildkite-agent pipeline upload pipeline.yml
+
+# _ cargo xtask generate-pipeline
+# echo +++ pipeline
+# cat pipeline.yml
+
+# _ buildkite-agent pipeline upload pipeline.yml
